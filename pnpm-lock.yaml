@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      iconv-lite:
+        specifier: ^0.7.2
+        version: 0.7.2
+      mojibake:
+        specifier: ^0.0.0
+        version: 0.0.0
       playwright:
         specifier: 1.58.2
         version: 1.58.2
@@ -16,8 +22,15 @@ packages:
 
   fsevents@2.3.2:
     resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
-    engines: {node: 8.16.0 || 10.6.0 || >=11.0.0}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  iconv-lite@0.7.2:
+    resolution: {integrity: sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==}
+    engines: {node: '>=0.10.0'}
+
+  mojibake@0.0.0:
+    resolution: {integrity: sha512-svH4omTiVBHIG1wfRxX6sdGeo8vKzNtIzWfPCYiZK7nBQYU94Pg8y32GDjyef05KmTm/Bp2jvbNZWru3gUB22Q==}
 
   playwright-core@1.58.2:
     resolution: {integrity: sha512-yZkEtftgwS8CsfYo7nm0KE8jsvm6i/PTgVtB8DL726wNf6H2IMsDuxCpJj59KDaxCtSnrWan2AeDqM7JBaultg==}
@@ -29,10 +42,19 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  safer-buffer@2.1.2:
+    resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
+
 snapshots:
 
   fsevents@2.3.2:
     optional: true
+
+  iconv-lite@0.7.2:
+    dependencies:
+      safer-buffer: 2.1.2
+
+  mojibake@0.0.0: {}
 
   playwright-core@1.58.2: {}
 
@@ -41,3 +63,5 @@ snapshots:
       playwright-core: 1.58.2
     optionalDependencies:
       fsevents: 2.3.2
+
+  safer-buffer@2.1.2: {}
