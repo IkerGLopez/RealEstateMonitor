@@ -3,6 +3,7 @@ const mri = require('mri');
 const adapters = require('./adapters/index.js');
 const db = require('./src/db.js');
 const monitoring = require('./src/monitoring.js');
+const notifications = require('./src/notifications.js');
 
 async function main() {
   const argv = mri(process.argv.slice(2));
@@ -83,6 +84,14 @@ async function main() {
       await db.setupDatabase();
       const changes = await monitoring.processScrapeRun(siteId, listings, { dryRun });
       
+      // Notify changes via Telegram
+      const listingsMap = new Map();
+      for (const item of listings) {
+        listingsMap.set(item.id, item);
+      }
+      // Pass { dryRun } to explicitly suppress execution during a dry run.
+      await notifications.notifyChanges(changes, listingsMap, { dryRun });
+
       if (!dryRun) {
         console.log(`[Persistence] Audit trail correctly persisted to Turso/SQLite.`);
       }
