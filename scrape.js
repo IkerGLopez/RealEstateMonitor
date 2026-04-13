@@ -5,9 +5,17 @@ const db = require('./src/db.js');
 const monitoring = require('./src/monitoring.js');
 const notifications = require('./src/notifications.js');
 const scheduler = require('./src/scheduler.js');
+const dashboard = require('./dashboard.js');
 
 async function main() {
   const argv = mri(process.argv.slice(2));
+
+  // Switch to start the dashboard web server
+  if (argv.dashboard) {
+    const port = argv.port || 3000;
+    dashboard.startDashboard(port);
+    return;
+  }
 
   // If `--status` flag is used, just show DB status and exit
   if (argv.status) {
