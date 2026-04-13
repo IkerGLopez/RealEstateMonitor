@@ -4,124 +4,268 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RealEstateMonitor Dashboard</title>
-    <!-- Using Pico CSS for simple, clean UI -->
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
     />
     <style>
-      .change-diff {
-        background-color: var(--pico-muted-color);
-        padding: 0.5rem;
-        border-radius: 0.5rem;
-        font-family: monospace;
-        font-size: 0.85em;
-        white-space: pre-wrap;
+      :root {
+        --pico-border-radius: 0.5rem;
       }
-      .badge-new { color: var(--pico-ins-color); font-weight: bold; }
-      .badge-removed { color: var(--pico-del-color); font-weight: bold; }
-      .badge-changed { color: var(--pico-form-element-invalid-active-border-color); font-weight: bold; }
-      table th { cursor: pointer; user-select: none; }
+      body {
+        background-color: var(--pico-background-color);
+      }
+      nav.top-nav {
+        border-bottom: 1px solid var(--pico-muted-border-color);
+        padding: 1rem 0;
+        margin-bottom: 2rem;
+        background: var(--pico-card-background-color);
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .stat-card {
+        text-align: center;
+        padding: 2rem;
+        box-shadow: var(--pico-card-box-shadow);
+        transition: transform 0.2s ease;
+        border-top: 4px solid var(--pico-primary);
+      }
+      .stat-card:hover {
+        transform: translateY(-2px);
+      }
+      .stat-card h2 {
+        font-size: 3rem;
+        margin-bottom: 0;
+        color: var(--pico-primary);
+      }
+      .stat-card header {
+        font-size: 1.25rem;
+        color: var(--pico-muted-color);
+        margin-bottom: 1rem;
+        border-bottom: none;
+      }
+      .timeline-container {
+        max-height: 500px;
+        overflow-y: auto;
+        padding-right: 1rem;
+      }
+      .timeline-item {
+        border-left: 4px solid var(--pico-muted-border-color);
+        padding-left: 1.5rem;
+        margin-bottom: 1.5rem;
+        position: relative;
+      }
+      .timeline-item::before {
+        content: "";
+        position: absolute;
+        left: -10px;
+        top: 0;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--pico-primary-background);
+        border: 4px solid var(--pico-card-background-color);
+        transition: background 0.2s;
+      }
+      .timeline-item:hover::before {
+        background: var(--pico-primary);
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.25em 0.75em;
+        border-radius: var(--pico-border-radius);
+        font-size: 0.75em;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .badge-new { background-color: rgba(46, 204, 113, 0.15); color: #27ae60; }
+      .badge-removed { background-color: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+      .badge-changed { background-color: rgba(243, 156, 18, 0.15); color: #f39c12; }
+      
+      .change-diff {
+        background-color: var(--pico-code-background-color);
+        padding: 1rem;
+        border-radius: var(--pico-border-radius);
+        font-size: 0.9em;
+        overflow-x: auto;
+      }
+      .diff-row {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        margin-bottom: 0.25rem;
+      }
+      .diff-old { color: var(--pico-del-color); text-decoration: line-through; }
+      .diff-new { color: var(--pico-ins-color); font-weight: bold; }
+      
+      .table-container {
+        overflow-x: auto;
+        box-shadow: var(--pico-card-box-shadow);
+        border-radius: var(--pico-border-radius);
+        background: var(--pico-card-background-color);
+        padding: 1rem;
+      }
+      table {
+        margin-bottom: 0;
+      }
+      table th {
+        cursor: pointer;
+        white-space: nowrap;
+        background: var(--pico-card-background-color);
+      }
+      table th:hover {
+        color: var(--pico-primary);
+      }
+      table tr {
+        transition: background-color 0.15s ease;
+      }
+      table tbody tr:hover {
+        background-color: var(--pico-table-row-stripped-background-color);
+      }
+      .search-wrapper {
+        margin-bottom: 1.5rem;
+      }
+      hgroup > * { margin-bottom: 0; }
+      hgroup { margin-bottom: 2rem; }
     </style>
   </head>
   <body>
-    <main class="container">
-      <hgroup>
-        <h1>Real Estate Monitor</h1>
-        <p>Market Trends and Recent Activity</p>
-      </hgroup>
+    <nav class="container-fluid top-nav">
+      <div class="container">
+        <ul>
+          <li><img src="https://api.iconify.design/lucide:building-2.svg" alt="logo" style="width: 24px; vertical-align: middle; margin-right: 0.5rem;" /><strong>RealEstateMonitor</strong></li>
+        </ul>
+        <ul>
+          <li><a href="#stats" class="secondary">Stats</a></li>
+          <li><a href="#changes" class="secondary">Changes</a></li>
+          <li><a href="#listings" class="secondary">Listings</a></li>
+        </ul>
+      </div>
+    </nav>
 
+    <main class="container">
       <% if (typeof error !== 'undefined') { %>
-        <article style="background:var(--pico-del-color); color:white;">
-          <strong>Error loading dashboard:</strong> <%= error %>
+        <article style="border-color: var(--pico-del-color);">
+          <header style="background-color: var(--pico-del-color); color: white;">Error</header>
+          <p><%= error %></p>
         </article>
       <% } %>
 
-      <section class="grid">
-        <article>
-          <header>Total Active Listings</header>
-          <h2><%= stats.activeListings %></h2>
-        </article>
-        <article>
-          <header>Recent Activity (Last Run)</header>
-          <h2><%= stats.recentChanges %></h2>
-        </article>
+      <section id="stats">
+        <hgroup>
+          <h2>Dashboard Overview</h2>
+          <p>Current market status</p>
+        </hgroup>
+        <div class="grid">
+          <article class="stat-card">
+            <header>Active Listings</header>
+            <h2><%= stats.activeListings %></h2>
+          </article>
+          <article class="stat-card" style="border-top-color: var(--pico-ins-color);">
+            <header>Changes (Last Run)</header>
+            <h2 style="color: var(--pico-ins-color);"><%= stats.recentChanges %></h2>
+          </article>
+        </div>
       </section>
 
-      <hr />
+      <hr style="margin: 3rem 0;" />
 
-      <section>
-        <h2>Recent Changes</h2>
+      <section id="changes">
+        <hgroup>
+          <h2>Activity Feed</h2>
+          <p>Latest market movements across monitored sites</p>
+        </hgroup>
+        
         <% if (changes.length === 0) { %>
-          <p><em>No recent changes detected.</em></p>
+          <article>
+            <p class="pico-color-muted" style="text-align: center; margin: 2rem 0;">No recent changes detected.</p>
+          </article>
         <% } else { %>
-          <div style="max-height: 400px; overflow-y: auto;">
+          <div class="timeline-container">
             <% changes.forEach(function(change) { %>
-              <article style="margin-bottom: 1rem; padding: 1rem;">
-                <header style="margin-bottom: 0.5rem; padding-bottom: 0.5rem;">
-                  <strong>
-                    <% if(change.changeType === 'new') { %>
-                      <span class="badge-new">[NEW]</span>
-                    <% } else if(change.changeType === 'removed') { %>
-                      <span class="badge-removed">[REMOVED]</span>
+              <div class="timeline-item">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 1rem;">
+                  <h4 style="margin-bottom: 0;">
+                    <% if (change.title) { %>
+                      <%= change.title %>
                     <% } else { %>
-                      <span class="badge-changed">[UPDATED / <%= change.changeType.toUpperCase() %>]</span>
+                      Listing <%= change.id %>
                     <% } %>
-                  </strong>
-                  - <%= new Date(change.createdAt).toLocaleString() %>
-                </header>
+                  </h4>
+                  <small class="pico-color-muted"><%= new Date(change.createdAt).toLocaleString() %></small>
+                </div>
                 
-                <p style="margin-bottom: 0.5rem;">
-                  <strong>Listing ID:</strong> <%= change.id %> <br/>
-                  <% if (change.title) { %>
-                    <strong>Title:</strong> <%= change.title %> 
-                    <% if (change.url) { %>
-                      <a href="<%= change.url %>" target="_blank" rel="noopener noreferrer">(Link)</a>
-                    <% } %>
+                <div style="margin-top: 0.5rem; margin-bottom: 1rem;">
+                  <% if(change.changeType === 'new') { %>
+                    <span class="badge badge-new">New</span>
+                  <% } else if(change.changeType === 'removed') { %>
+                    <span class="badge badge-removed">Removed</span>
+                  <% } else { %>
+                    <span class="badge badge-changed">Updated</span>
                   <% } %>
-                </p>
+                  
+                  <% if (change.url) { %>
+                    <a href="<%= change.url %>" target="_blank" rel="noopener noreferrer" style="margin-left: 0.5rem; font-size: 0.85em;">External Link &nearr;</a>
+                  <% } %>
+                </div>
 
                 <% if (change.changeType === 'price_changed' || change.changeType === 'attributes_changed') { %>
                   <div class="change-diff">
-<% Object.keys(change.diffJson).forEach(k => { %>
-- <strong><%= k %>:</strong> <%= change.diffJson[k].old %> &rarr; <%= change.diffJson[k].new %>
-<% }) %>
+                    <% Object.keys(change.diffJson).forEach(k => { %>
+                      <div class="diff-row">
+                        <strong style="min-width: 80px;"><%= k %>:</strong> 
+                        <span class="diff-old"><%= change.diffJson[k].old || 'N/A' %></span>
+                        <span>&rarr;</span>
+                        <span class="diff-new"><%= change.diffJson[k].new || 'N/A' %></span>
+                      </div>
+                    <% }) %>
                   </div>
                 <% } else if (change.changeType === 'new') { %>
-                  <div class="change-diff">Newly detected entry!</div>
+                  <div class="change-diff" style="color: var(--pico-ins-color);">A new property was discovered on the market.</div>
                 <% } else if (change.changeType === 'removed') { %>
-                  <div class="change-diff">Listing is no longer on the site.</div>
+                  <div class="change-diff" style="color: var(--pico-del-color);">This property is no longer available.</div>
                 <% } %>
-              </article>
+              </div>
             <% }) %>
           </div>
         <% } %>
       </section>
 
-      <hr />
+      <hr style="margin: 3rem 0;" />
 
-      <section>
-        <h2>Current Listings</h2>
-        <!-- Basic client-side sortable table logic -->
-        <input type="search" id="searchInput" placeholder="Search by title or location..." />
+      <section id="listings" style="margin-bottom: 4rem;">
+        <hgroup>
+          <h2>Current Listings</h2>
+          <p>Complete directory of properties currently monitored</p>
+        </hgroup>
+
+        <div class="search-wrapper">
+          <input type="search" id="searchInput" placeholder="Search by title or location..." />
+        </div>
+
         <% if (listings.length === 0) { %>
-          <p><em>No active listings available.</em></p>
+          <article>
+            <p class="pico-color-muted" style="text-align: center; margin: 2rem 0;">No active listings available.</p>
+          </article>
         <% } else { %>
-          <figure>
-            <table id="listingsTable" role="grid">
+          <div class="table-container">
+            <table id="listingsTable" class="striped">
               <thead>
                 <tr>
-                  <th onclick="sortTable(0)">Title &#x21D5;</th>
-                  <th onclick="sortTable(1)">Location &#x21D5;</th>
-                  <th onclick="sortTable(2, true)">Price &#x21D5;</th>
-                  <th onclick="sortTable(3)">First Seen &#x21D5;</th>
+                  <th onclick="sortTable(0)">Title &UpDownArrow;</th>
+                  <th onclick="sortTable(1)">Location &UpDownArrow;</th>
+                  <th onclick="sortTable(2, true)">Price &UpDownArrow;</th>
+                  <th onclick="sortTable(3)">First Seen &UpDownArrow;</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 <% listings.forEach(function(listing) { %>
                   <tr>
-                    <td><%= listing.title || 'N/A' %></td>
+                    <td><strong><%= listing.title || 'N/A' %></strong></td>
                     <td><%= listing.location || 'N/A' %></td>
                     <td data-value="<%= listing.price || 0 %>">
                       <%= listing.price ? new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(listing.price) : 'N/A' %>
@@ -129,7 +273,7 @@
                     <td><%= new Date(listing.first_seen).toLocaleDateString() %></td>
                     <td>
                       <% if (listing.url) { %>
-                        <a href="<%= listing.url %>" target="_blank" rel="noopener noreferrer">View</a>
+                        <a href="<%= listing.url %>" target="_blank" rel="noopener noreferrer" role="button" class="outline" style="padding: 0.25rem 0.75rem; font-size: 0.85em;">View</a>
                       <% } else { %>
                         -
                       <% } %>
@@ -138,15 +282,15 @@
                 <% }) %>
               </tbody>
             </table>
-          </figure>
+          </div>
         <% } %>
       </section>
     </main>
 
     <script>
-      // Primitive client-side sorting by clicking Table Headers
       function sortTable(columnIndex, isNumeric = false) {
         const table = document.getElementById("listingsTable");
+        if (!table) return;
         let switching = true;
         let direction = "asc"; 
         let switchcount = 0;
@@ -183,7 +327,6 @@
         }
       }
 
-      // Live Search filtering
       document.getElementById('searchInput')?.addEventListener('keyup', function() {
         let filter = this.value.toLowerCase();
         let rows = document.querySelectorAll('#listingsTable tbody tr');
