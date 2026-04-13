@@ -4,6 +4,7 @@ const adapters = require('./adapters/index.js');
 const db = require('./src/db.js');
 const monitoring = require('./src/monitoring.js');
 const notifications = require('./src/notifications.js');
+const scheduler = require('./src/scheduler.js');
 
 async function main() {
   const argv = mri(process.argv.slice(2));
@@ -12,6 +13,18 @@ async function main() {
   if (argv.status) {
     await db.setupDatabase();
     await db.getDatabaseStatus();
+    process.exit(0);
+  }
+
+  if (argv.schedule) {
+    // If it's a boolean (no value provided), pass undefined to use default env var
+    const cronExpr = typeof argv.schedule === 'string' ? argv.schedule : undefined;
+    scheduler.startScheduler(cronExpr);
+    return; // Block process from exiting naturally because chron needs to run forever
+  }
+
+  if (argv.once) {
+    await scheduler.runOnce();
     process.exit(0);
   }
 
