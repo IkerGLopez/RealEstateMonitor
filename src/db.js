@@ -115,9 +115,103 @@ async function getDatabaseStatus() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Dashboard Queries (Read-Only)
+// ---------------------------------------------------------------------------
+
+async function getDashboardStats() {
+  try {
+    const activeResult = await db.execute(`SELECT COUNT(*) as count FROM listings_current WHERE active = 1`);
+    const activeCount = activeResult.rows[0]?.count || 0;
+
+    const lastRunResult = await db.execute(`SELECT run_id FROM scrape_runs ORDER BY started_at DESC LIMIT 1`);
+    let recentChangesCount = 0;
+    
+    if (lastRunResult.rows.length > 0) {
+      const lastRunId = lastRunResult.rows[0].run_id;
+      const changesResult = await db.execute({
+        sql: `SELECT COUNT(*) as count FROM listing_changes WHERE run_id = ?`,
+        args: [lastRunId]
+      });
+      recentChangesCount = changesResult.rows[0]?.count || 0;
+    }
+
+    return {
+      activeListings: activeCount,
+      recentChanges: recentChangesCount
+    };
+  } catch (err) {
+    console.warn("Could not fetch dashboard stats (table possibly empty?):", err.message);
+    return { activeListings: 0, recentChanges: 0 };
+  }
+}
+
+async function getDashboardChanges(limit = 50) {
+  try {
+    const sql = `
+      SELECT 
+        c.id, 
+        c.change_type, 
+        c.diff_json, 
+        c.created_at, 
+        s.title, 
+        s.url
+      FROM listing_changes c
+      LEFT JOIN listings_snapshot s ON c.id = s.id AND c.run_id = s.run_id
+      ORDER BY c.created_at DESC 
+      LIMIT ?
+    `;
+    const result = await db.execute({ sql, args: [limit] });
+    return result.rows.map(row => ({
+      id: row.id,
+      changeType: row.change_type,
+      diffJson: JSON.parse(row.diff_json || '{}'),
+      createdAt: row.created_at,
+      title: row.title,
+      url: row.url
+    }));
+  } catch (err) {
+    console.warn("Could not fetch dashboard changes:", err.message);
+    return [];
+  }
+}
+
+async function getDashboardListings() {
+  try {
+    const sql = `
+      SELECT 
+        c.id, 
+        c.siteId,
+        c.first_seen, 
+        s.title, 
+        s.location, 
+        s.price, 
+        s.url
+      FROM listings_current c
+      LEFT JOIN listings_snapshot s ON c.id = s.id
+        AND s.run_id = (
+            SELECT run_id FROM listings_snapshot 
+            WHERE id = c.id 
+            ORDER BY scrapedAt DESC 
+            LIMIT 1
+        )
+      WHERE c.active = 1
+      ORDER BY c.first_seen DESC
+    `;
+    const result = await db.execute(sql);
+    return result.rows;
+  } catch (err) {
+    console.warn("Could not fetch dashboard listings:", err.message);
+    return [];
+  }
+}
+
 module.exports = {
   db,
   setupDatabase,
   upsertListing,
-  getDatabaseStatus
+  getDatabaseStatus,
+  getDashboardStats,
+  getDashboardChanges,
+  getDashboardListings
 };
