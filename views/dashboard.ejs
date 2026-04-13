@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RealEstateMonitor Dashboard</title>
+    <!-- Using Pico CSS for simple, clean UI -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+    />
+    <style>
+      .change-diff {
+        background-color: var(--pico-muted-color);
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        font-family: monospace;
+        font-size: 0.85em;
+        white-space: pre-wrap;
+      }
+      .badge-new { color: var(--pico-ins-color); font-weight: bold; }
+      .badge-removed { color: var(--pico-del-color); font-weight: bold; }
+      .badge-changed { color: var(--pico-form-element-invalid-active-border-color); font-weight: bold; }
+      table th { cursor: pointer; user-select: none; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <hgroup>
+        <h1>Real Estate Monitor</h1>
+        <p>Market Trends and Recent Activity</p>
+      </hgroup>
+
+      <% if (typeof error !== 'undefined') { %>
+        <article style="background:var(--pico-del-color); color:white;">
+          <strong>Error loading dashboard:</strong> <%= error %>
+        </article>
+      <% } %>
+
+      <section class="grid">
+        <article>
+          <header>Total Active Listings</header>
+          <h2><%= stats.activeListings %></h2>
+        </article>
+        <article>
+          <header>Recent Activity (Last Run)</header>
+          <h2><%= stats.recentChanges %></h2>
+        </article>
+      </section>
+
+      <hr />
+
+      <section>
+        <h2>Recent Changes</h2>
+        <% if (changes.length === 0) { %>
+          <p><em>No recent changes detected.</em></p>
+        <% } else { %>
+          <div style="max-height: 400px; overflow-y: auto;">
+            <% changes.forEach(function(change) { %>
+              <article style="margin-bottom: 1rem; padding: 1rem;">
+                <header style="margin-bottom: 0.5rem; padding-bottom: 0.5rem;">
+                  <strong>
+                    <% if(change.changeType === 'new') { %>
+                      <span class="badge-new">[NEW]</span>
+                    <% } else if(change.changeType === 'removed') { %>
+                      <span class="badge-removed">[REMOVED]</span>
+                    <% } else { %>
+                      <span class="badge-changed">[UPDATED / <%= change.changeType.toUpperCase() %>]</span>
+                    <% } %>
+                  </strong>
+                  - <%= new Date(change.createdAt).toLocaleString() %>
+                </header>
+                
+                <p style="margin-bottom: 0.5rem;">
+                  <strong>Listing ID:</strong> <%= change.id %> <br/>
+                  <% if (change.title) { %>
+                    <strong>Title:</strong> <%= change.title %> 
+                    <% if (change.url) { %>
+                      <a href="<%= change.url %>" target="_blank" rel="noopener noreferrer">(Link)</a>
+                    <% } %>
+                  <% } %>
+                </p>
+
+                <% if (change.changeType === 'price_changed' || change.changeType === 'attributes_changed') { %>
+                  <div class="change-diff">
+<% Object.keys(change.diffJson).forEach(k => { %>
+- <strong><%= k %>:</strong> <%= change.diffJson[k].old %> &rarr; <%= change.diffJson[k].new %>
+<% }) %>
+                  </div>
+                <% } else if (change.changeType === 'new') { %>
+                  <div class="change-diff">Newly detected entry!</div>
+                <% } else if (change.changeType === 'removed') { %>
+                  <div class="change-diff">Listing is no longer on the site.</div>
+                <% } %>
+              </article>
+            <% }) %>
+          </div>
+        <% } %>
+      </section>
+
+      <hr />
+
+      <section>
+        <h2>Current Listings</h2>
+        <!-- Basic client-side sortable table logic -->
+        <input type="search" id="searchInput" placeholder="Search by title or location..." />
+        <% if (listings.length === 0) { %>
+          <p><em>No active listings available.</em></p>
+        <% } else { %>
+          <figure>
+            <table id="listingsTable" role="grid">
+              <thead>
+                <tr>
+                  <th onclick="sortTable(0)">Title &#x21D5;</th>
+                  <th onclick="sortTable(1)">Location &#x21D5;</th>
+                  <th onclick="sortTable(2, true)">Price &#x21D5;</th>
+                  <th onclick="sortTable(3)">First Seen &#x21D5;</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% listings.forEach(function(listing) { %>
+                  <tr>
+                    <td><%= listing.title || 'N/A' %></td>
+                    <td><%= listing.location || 'N/A' %></td>
+                    <td data-value="<%= listing.price || 0 %>">
+                      <%= listing.price ? new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(listing.price) : 'N/A' %>
+                    </td>
+                    <td><%= new Date(listing.first_seen).toLocaleDateString() %></td>
+                    <td>
+                      <% if (listing.url) { %>
+                        <a href="<%= listing.url %>" target="_blank" rel="noopener noreferrer">View</a>
+                      <% } else { %>
+                        -
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </figure>
+        <% } %>
+      </section>
+    </main>
+
+    <script>
+      // Primitive client-side sorting by clicking Table Headers
+      function sortTable(columnIndex, isNumeric = false) {
+        const table = document.getElementById("listingsTable");
+        let switching = true;
+        let direction = "asc"; 
+        let switchcount = 0;
+        
+        while (switching) {
+          switching = false;
+          let rows = table.rows;
+          let idx;
+          
+          for (idx = 1; idx < (rows.length - 1); idx++) {
+            let shouldSwitch = false;
+            let x = rows[idx].getElementsByTagName("TD")[columnIndex];
+            let y = rows[idx + 1].getElementsByTagName("TD")[columnIndex];
+            
+            let xVal = isNumeric ? parseFloat(x.getAttribute('data-value')) || 0 : x.innerHTML.toLowerCase();
+            let yVal = isNumeric ? parseFloat(y.getAttribute('data-value')) || 0 : y.innerHTML.toLowerCase();
+
+            if (direction == "asc") {
+              if (xVal > yVal) { shouldSwitch = true; break; }
+            } else {
+              if (xVal < yVal) { shouldSwitch = true; break; }
+            }
+          }
+          if (shouldSwitch) {
+            rows[idx].parentNode.insertBefore(rows[idx + 1], rows[idx]);
+            switching = true;
+            switchcount++;      
+          } else {
+            if (switchcount == 0 && direction == "asc") {
+              direction = "desc";
+              switching = true;
+            }
+          }
+        }
+      }
+
+      // Live Search filtering
+      document.getElementById('searchInput')?.addEventListener('keyup', function() {
+        let filter = this.value.toLowerCase();
+        let rows = document.querySelectorAll('#listingsTable tbody tr');
+        rows.forEach(row => {
+          let text = row.innerText.toLowerCase();
+          row.style.display = text.includes(filter) ? '' : 'none';
+        });
+      });
+    </script>
+  </body>
+</html>
