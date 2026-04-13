@@ -1,17 +1,26 @@
 # Project Specifications: Multi-Site Real Estate Monitor
 
 ## Project Summary
-Development of a Node.js web scraper/monitor that extracts real estate listings, persists the information in both a local SQLite database and in the cloud (Turso), monitors changes over time (price variations, new listings, removals), and sends automated notifications via Telegram. Use `pnpm` exclusively for package management.
+Development of a Node.js web scraper/monitor that extracts real estate listings, persists the information in both a local SQLite database and in the cloud (Turso), monitors changes over time (price variations, new listings, removals), sends automated notifications via Telegram, runs on an automated schedule, and provides a web dashboard to visualize the data and market trends.
+
+## Tech Stack & Tools
+- **Runtime:** Node.js
+- **Package Manager:** **pnpm** (Strictly required. Do not use npm or yarn).
+- **Database:** SQLite (local) / Turso (cloud).
 
 ## Expected File Structure
 The project should be organized as follows:
-- `scrape.js`: CLI entry point (scrape + persist).
-- `.env`: Turso + Telegram credentials (gitignored).
+- `scrape.js`: CLI entry point (scrape + persist + schedule).
+- `dashboard.js`: CLI entry point for the web server (Milestone 6).
+- `package.json` & `pnpm-lock.yaml`: Dependency manifests.
+- `.env`: Turso + Telegram credentials + cron expressions (gitignored).
 - `.env.example`: Example `.env` template.
 - `src/types.js`: JSDoc type definitions.
 - `src/db.js`: Turso (libsql) persistence module.
-- `src/monitoring.js`: Change detection & audit trail (Milestone 3).
-- `src/notifications.js`: Telegram notifications (Milestone 4).
+- `src/monitoring.js`: Change detection & audit trail.
+- `src/notifications.js`: Telegram notifications.
+- `src/scheduler.js`: Cron job logic (Milestone 5).
+- `public/` or `views/`: Static assets or templates for the dashboard (Milestone 6).
 - `adapters/index.js`: Adapter registry.
 - `adapters/iparralde.js`: Inmobiliaria Iparralde adapter.
 
@@ -43,24 +52,21 @@ The project should be organized as follows:
 **Objective:** On each run, compute what changed since the last run and store a full audit trail.
 
 ### Technical Requirements (4-table schema):
-1. `scrape_runs`: One row per scrape execution (columns: `run_id`, `siteId`, `started_at`, `finished_at`, `listings_found`, `status`).
+1. `scrape_runs`: One row per scrape execution.
 2. `listings_current`: Latest known state per listing (`active`, `miss_count`, `first_seen`, `last_seen`).
-3. `listings_snapshot`: Immutable copy of each listing as seen in each run (references `run_id`).
-4. `listing_changes`: Change events with `change_type` and a structured `diff_json` (e.g., `[{"field": "price_num", "old": 195000, "new": 189000 }]`).
+3. `listings_snapshot`: Immutable copy of each listing as seen in each run.
+4. `listing_changes`: Change events with `change_type` and a structured `diff_json`.
 
 ### Change Detection and Normalization Rules:
-- **Change types:** `new` (id not seen before), `price_changed` (normalized numeric price differs), `attributes_changed` (title, location, size, rooms, etc. changed), `removed` (absent for `MAX_MISS_COUNT` consecutive runs).
-- **Normalization:**
-  - Normalize price by stripping currency symbols and thousand separators, then parsing to an integer (`price_num`).
-  - Normalize text fields (`title`, `location`) by trimming whitespace and collapsing multiple spaces before comparison.
-- **`last_seen` Semantics:** Update `last_seen` in `listings_current` every time the listing appears in a scrape, regardless of whether anything changed.
+- **Change types:** `new`, `price_changed`, `attributes_changed`, `removed`.
+- **Normalization:** Strip currency symbols and whitespace formatting noise.
+- **`last_seen` Semantics:** Update in `listings_current` every time the listing appears.
 
 ### Acceptance Checks:
-- First ever run produces `new` change events for all scraped listings.
-- Re-running immediately with no site changes produces no new `price_changed` or `attributes_changed` events (only `last_seen` is updated).
-- A listing missing from one run is not immediately marked `removed`; it must exceed `MAX_MISS_COUNT` consecutive misses.
-- A `removed` listing that reappears in a later run generates a `new` event and resets `miss_count` to 0.
-- An optional `--dry-run` flag prints detected changes without writing them to the DB.
+- First ever run produces `new` change events.
+- Re-running immediately produces no new changes.
+- Listing absent > `MAX_MISS_COUNT` marked as `removed`.
+- `--dry-run` flag prints detected changes without DB write.
 
 ---
 
@@ -68,10 +74,48 @@ The project should be organized as follows:
 **Objective:** Send a Telegram message when changes happen.
 
 ### Technical Requirements:
-1. Add `.env` support with at least: `ENABLE_NOTIFICATIONS`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
-2. Send Telegram messages using `parse_mode: "HTML"`.
-3. Integrate logic to react to the events generated in Milestone 3.
+1. Add `.env` support: `ENABLE_NOTIFICATIONS`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+2. Send messages using `parse_mode: "HTML"`.
 
 ### Acceptance Checks:
-- With notifications enabled, a new listing triggers a message.
-- Include a `--dry-run` mode that forces notifications off, ensuring no messages are sent.
+- With notifications enabled, changes trigger a message.
+- `--dry-run` forces notifications off.
+
+---
+
+## Milestone 5: Scheduling
+**Objective:** Run your scraper automatically on a schedule without manual intervention.
+
+### Technical Requirements:
+1. **Scheduler Integration:** Use `node-cron` (or a similar lightweight scheduler).
+2. **Configuration:** Read the default cron expression from the `.env` variable `SCRAPE_CRON`.
+3. **CLI Mode:** Add a flag `--schedule "* * * * *"` to start the scheduler as a long-running process, which can override the `.env` default.
+4. **Execution Flow:** On each tick, run the full pipeline: scrape → persist → detect changes → notify.
+5. **Resilience:** If one site's adapter fails, log the error and continue with the remaining sites. Do NOT crash the process.
+6. **OS-Level Alternative:** Support a `--once` flag that runs all configured sites immediately and exits (code 0), useful for external cron jobs.
+
+### Acceptance Checks:
+- Starting with `--schedule "*/15 * * * *"` triggers scrapes appropriately (avoid intervals < 15 mins to prevent IP blocks).
+- Stopping the process (Ctrl+C) shuts down cleanly without leaving zombie browser instances.
+- If one adapter throws an error, the scheduler logs it and runs the next adapter on the following tick.
+
+---
+
+## Milestone 6: Web Dashboard
+**Objective:** A small web UI to browse listings, review changes, and understand market trends at a glance.
+
+### Technical Requirements:
+1. **Server Setup:** Build a lightweight web server (Express or Fastify).
+2. **Data Source:** Read directly from the Turso database (Read-Only).
+3. **Required Views:**
+   - **Current listings table:** All active listings with sortable columns (price, location, date first seen) and a link to the original detail page.
+   - **Change log:** A reverse-chronological feed of change events showing the diff for each event.
+   - **Summary stats:** Total active listings, number of changes since last run, and a simple chart/histogram.
+4. **Frontend Stack:** Static HTML + JS, or server-rendered templates (EJS, Handlebars, etc.).
+5. **CLI Mode:** Add `--dashboard` flag or a separate entry point (`node dashboard.js` / `node scrape.js --dashboard --port 3000`).
+
+### Acceptance Checks:
+- Opening `http://localhost:3000` shows the table populated from the DB.
+- The change log displays events with human-readable diffs.
+- Clicking a listing's detail URL opens the original page.
+- The dashboard loads correctly even when the database is completely empty.

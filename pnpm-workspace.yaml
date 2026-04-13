@@ -1,0 +1,4 @@
+miniumReleaseAge: 1440
+
+miniumReleaseAgeExclude:
+  # - poner aquí el nombre 
