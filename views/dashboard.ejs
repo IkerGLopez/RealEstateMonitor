@@ -327,13 +327,58 @@
         }
       }
 
-      document.getElementById('searchInput')?.addEventListener('keyup', function() {
-        let filter = this.value.toLowerCase();
-        let rows = document.querySelectorAll('#listingsTable tbody tr');
-        rows.forEach(row => {
-          let text = row.innerText.toLowerCase();
-          row.style.display = text.includes(filter) ? '' : 'none';
-        });
+      // Live search logic using Event Delegation (survives hot swap)
+      document.addEventListener('keyup', function(e) {
+        if (e.target && e.target.id === 'searchInput') {
+          let filter = e.target.value.toLowerCase();
+          let rows = document.querySelectorAll('#listingsTable tbody tr');
+          rows.forEach(row => {
+            let text = row.innerText.toLowerCase();
+            row.style.display = text.includes(filter) ? '' : 'none';
+          });
+        }
+      });
+    </script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      let isUpdating = false;
+
+      // When the dashboard detects DB changes, hot swap the <main> block
+      socket.on('db_updated', () => {
+        if (isUpdating) return;
+        isUpdating = true;
+        
+        fetch(window.location.href)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const newDoc = parser.parseFromString(html, 'text/html');
+            const newMain = newDoc.querySelector('main.container');
+
+            if (newMain) {
+              const currentMain = document.querySelector('main.container');
+              if (currentMain) {
+                // Keep the live search input state intact
+                const searchInput = document.getElementById('searchInput');
+                const prevSearchTerm = searchInput ? searchInput.value : '';
+
+                currentMain.innerHTML = newMain.innerHTML;
+
+                // Re-bind the search
+                const newSearchInput = document.getElementById('searchInput');
+                if (newSearchInput && prevSearchTerm) {
+                  newSearchInput.value = prevSearchTerm;
+                  // Trigger the filter again naturally
+                  newSearchInput.dispatchEvent(new Event('keyup'));
+                }
+              }
+            }
+          })
+          .catch(err => console.error("Failed to hot reload dashboard:", err))
+          .finally(() => {
+            isUpdating = false;
+          });
       });
     </script>
   </body>

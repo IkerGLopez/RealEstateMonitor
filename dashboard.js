@@ -1,9 +1,13 @@
 const express = require('express');
 const path = require('path');
+const http = require('http');
+const socketIo = require('socket.io');
 const db = require('./src/db.js');
 
 function startDashboard(port = 3000) {
   const app = express();
+  const server = http.createServer(app);
+  const io = socketIo(server);
 
   // Configure EJS template engine
   app.set('view engine', 'ejs');
@@ -37,13 +41,48 @@ function startDashboard(port = 3000) {
     }
   });
 
-  const server = app.listen(port, () => {
+  // Background polling to detect DB changes and broadcast to clients
+  let lastRunId = null;
+  const pollInterval = setInterval(async () => {
+    try {
+      // Find the most recently finished scrape run
+      const result = await db.db.execute(`
+        SELECT run_id 
+        FROM scrape_runs 
+        WHERE finished_at IS NOT NULL 
+        ORDER BY finished_at DESC LIMIT 1
+      `);
+      
+      if (result.rows.length > 0) {
+        const currentRunId = result.rows[0].run_id;
+        
+        if (lastRunId !== null && currentRunId !== lastRunId) {
+          // A new run has finished since we last checked!
+          io.emit('db_updated');
+        }
+        
+        lastRunId = currentRunId;
+      }
+    } catch (e) {
+      // Ignore errors (e.g. table doesn't exist yet on first boot before setup completes)
+    }
+  }, 5000);
+
+  const activeServer = server.listen(port, () => {
     console.log(`[Dashboard] Server running at http://localhost:${port}`);
   });
   
+  io.on('connection', (socket) => {
+    // Client connected
+  });
+
   // Handling grace shutdowns safely for express instances
-  process.on('SIGTERM', () => server.close());
-  process.on('SIGINT', () => server.close());
+  const cleanup = () => {
+    clearInterval(pollInterval);
+    activeServer.close();
+  };
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
 }
 
 if (require.main === module) {
