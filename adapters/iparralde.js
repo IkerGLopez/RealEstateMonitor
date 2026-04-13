@@ -4,6 +4,8 @@ const { chromium } = require('playwright');
 const siteId = 'iparralde';
 const DEFAULT_URL = 'https://inmobiliariaiparralde.com/';
 
+let _browserInstance = null;
+
 function normalize(value) {
   if (value == null) return '';
   const text = String(value).trim();
@@ -103,6 +105,7 @@ async function list(params = {}) {
   const headless = toBoolean(params.headless, true);
 
   const browser = await chromium.launch({ headless });
+  _browserInstance = browser;
   const page = await browser.newPage();
 
   try {
@@ -156,11 +159,26 @@ async function list(params = {}) {
 
     return Array.from(byKey.values());
   } finally {
-    await browser.close();
+    if (_browserInstance) {
+      await _browserInstance.close();
+      _browserInstance = null;
+    }
+  }
+}
+
+async function cleanup() {
+  if (_browserInstance) {
+    try {
+      await _browserInstance.close();
+    } catch (e) {
+      // ignore
+    }
+    _browserInstance = null;
   }
 }
 
 module.exports = {
   siteId,
   list,
+  cleanup
 };
