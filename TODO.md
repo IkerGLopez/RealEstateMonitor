@@ -1,0 +1,1 @@
+- Add Google Maps to the page for the location of the houses.

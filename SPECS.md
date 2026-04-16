@@ -1,12 +1,13 @@
 # Project Specifications: Multi-Site Real Estate Monitor
 
 ## Project Summary
-Development of a Node.js web scraper/monitor that extracts real estate listings, persists the information in both a local SQLite database and in the cloud (Turso), monitors changes over time (price variations, new listings, removals), sends automated notifications via Telegram, runs on an automated schedule, and provides a web dashboard to visualize the data and market trends.
+Development of a Node.js web scraper/monitor that extracts real estate listings, persists the information in both a local SQLite database and in the cloud (Turso), monitors changes over time (price variations, new listings, removals), sends automated notifications via Telegram, runs on an automated schedule, and provides a web dashboard. The final phase includes a full production deployment to an Azure Ubuntu VM with Nginx, HTTPS (Let's Encrypt), and a custom `.eus` domain.
 
 ## Tech Stack & Tools
 - **Runtime:** Node.js
 - **Package Manager:** **pnpm** (Strictly required. Do not use npm or yarn).
 - **Database:** SQLite (local) / Turso (cloud).
+- **Deployment & Infrastructure:** Azure (Ubuntu 24.04 VM), Nginx (Reverse Proxy), Systemd, Cron, Certbot (Let's Encrypt).
 
 ## Expected File Structure
 The project should be organized as follows:
@@ -19,8 +20,8 @@ The project should be organized as follows:
 - `src/db.js`: Turso (libsql) persistence module.
 - `src/monitoring.js`: Change detection & audit trail.
 - `src/notifications.js`: Telegram notifications.
-- `src/scheduler.js`: Cron job logic (Milestone 5).
-- `public/` or `views/`: Static assets or templates for the dashboard (Milestone 6).
+- `src/scheduler.js`: Cron job logic.
+- `public/` or `views/`: Static assets or templates for the dashboard.
 - `adapters/index.js`: Adapter registry.
 - `adapters/iparralde.js`: Inmobiliaria Iparralde adapter.
 
@@ -33,18 +34,12 @@ The project should be organized as follows:
 1. **Local Database:** Create a SQLite database file (e.g., `apartments.db`).
 2. **Basic Schema (`apartments`):** Must include `id` (PRIMARY KEY), `siteId`, `title`, `location`, `price`, `url`, `scrapedAt`, `createdAt`, `updatedAt`.
 3. **Insertion Logic:** "Upsert" by `id` to avoid duplicates.
-4. **Cloud Database:** Integration with Turso (`libsql`). Configure the connection by reading the tokens from a `.env` file.
-5. **Supported CLI Commands in `scrape.js`:**
-   - Output JSON to stdout: `node scrape.js --site iparralde`.
-   - Save to file: `node scrape.js --site iparralde --out listings.json`.
-   - Persist to DB: `node scrape.js --site iparralde --persist`.
-   - Check database status: `node scrape.js --status`.
-   - Custom filters: `node scrape.js --site iparralde --filters.propertyType Piso --filters.municipality Hendaye`.
-   - Limit pagination: `node scrape.js --site iparralde --max-pages 2`.
+4. **Cloud Database:** Integration with Turso (`libsql`).
+5. **Supported CLI Commands in `scrape.js`:** `--site`, `--out`, `--persist`, `--status`, `--filters.*`, `--max-pages`.
 
 ### Acceptance Checks:
 - Running scrape + persist twice keeps the row count stable (no duplicates).
-- The `--status` command shows the correct total listing count, broken down by site, and differentiates between the local DB and Turso.
+- The `--status` command shows the correct total listing count.
 
 ---
 
@@ -56,11 +51,6 @@ The project should be organized as follows:
 2. `listings_current`: Latest known state per listing (`active`, `miss_count`, `first_seen`, `last_seen`).
 3. `listings_snapshot`: Immutable copy of each listing as seen in each run.
 4. `listing_changes`: Change events with `change_type` and a structured `diff_json`.
-
-### Change Detection and Normalization Rules:
-- **Change types:** `new`, `price_changed`, `attributes_changed`, `removed`.
-- **Normalization:** Strip currency symbols and whitespace formatting noise.
-- **`last_seen` Semantics:** Update in `listings_current` every time the listing appears.
 
 ### Acceptance Checks:
 - First ever run produces `new` change events.
@@ -88,16 +78,13 @@ The project should be organized as follows:
 
 ### Technical Requirements:
 1. **Scheduler Integration:** Use `node-cron` (or a similar lightweight scheduler).
-2. **Configuration:** Read the default cron expression from the `.env` variable `SCRAPE_CRON`.
-3. **CLI Mode:** Add a flag `--schedule "* * * * *"` to start the scheduler as a long-running process, which can override the `.env` default.
-4. **Execution Flow:** On each tick, run the full pipeline: scrape → persist → detect changes → notify.
-5. **Resilience:** If one site's adapter fails, log the error and continue with the remaining sites. Do NOT crash the process.
-6. **OS-Level Alternative:** Support a `--once` flag that runs all configured sites immediately and exits (code 0), useful for external cron jobs.
+2. **Configuration:** Read default cron expression from `.env` (`SCRAPE_CRON`).
+3. **CLI Mode:** Add `--schedule "* * * * *"` and `--once` flags.
 
 ### Acceptance Checks:
-- Starting with `--schedule "*/15 * * * *"` triggers scrapes appropriately (avoid intervals < 15 mins to prevent IP blocks).
-- Stopping the process (Ctrl+C) shuts down cleanly without leaving zombie browser instances.
-- If one adapter throws an error, the scheduler logs it and runs the next adapter on the following tick.
+- Starting with `--schedule "*/15 * * * *"` triggers scrapes appropriately.
+- Stopping the process (Ctrl+C) shuts down cleanly.
+- If one adapter throws an error, the scheduler logs it and continues.
 
 ---
 
@@ -105,17 +92,81 @@ The project should be organized as follows:
 **Objective:** A small web UI to browse listings, review changes, and understand market trends at a glance.
 
 ### Technical Requirements:
-1. **Server Setup:** Build a lightweight web server (Express or Fastify).
-2. **Data Source:** Read directly from the Turso database (Read-Only).
-3. **Required Views:**
-   - **Current listings table:** All active listings with sortable columns (price, location, date first seen) and a link to the original detail page.
-   - **Change log:** A reverse-chronological feed of change events showing the diff for each event.
-   - **Summary stats:** Total active listings, number of changes since last run, and a simple chart/histogram.
-4. **Frontend Stack:** Static HTML + JS, or server-rendered templates (EJS, Handlebars, etc.).
-5. **CLI Mode:** Add `--dashboard` flag or a separate entry point (`node dashboard.js` / `node scrape.js --dashboard --port 3000`).
+1. **Server Setup:** Build a lightweight web server (Express or Fastify) reading read-only from Turso.
+2. **Required Views:** Current listings table, Change log, Summary stats.
+3. **CLI Mode:** Add `--dashboard` flag or `dashboard.js` entry point.
 
 ### Acceptance Checks:
-- Opening `http://localhost:3000` shows the table populated from the DB.
-- The change log displays events with human-readable diffs.
-- Clicking a listing's detail URL opens the original page.
-- The dashboard loads correctly even when the database is completely empty.
+- Dashboard loads correctly on `http://localhost:3000` even if DB is empty.
+- Displays listings, logs, and clickable URLs.
+
+---
+
+## Milestone 7: Create an Azure Cloud VM
+**Objective:** Deploy an Ubuntu 24.04 virtual machine in Azure and prepare it for the codebase.
+
+### Technical Requirements:
+1. **VM Specs:** Ubuntu Server 24.04 LTS, Standard_B1s size, SSH authentication.
+2. **Networking:** Inbound ports open for SSH (22), HTTP (80), and HTTPS (443).
+3. **AI Assistant:** Install Qwen Code as a terminal-based AI assistant on the server.
+
+### Acceptance Checks:
+- Can successfully connect to the Azure VM via SSH using the `.pem` key.
+- Running `qwen` on the server successfully launches the AI agent.
+
+---
+
+## Milestone 8: Provision the Server
+**Objective:** Set up a secure environment, clone the codebase, and install dependencies.
+
+### Technical Requirements:
+1. **Dedicated User:** Create a non-root user named `deploy` with passwordless sudo permissions.
+2. **GitHub Access:** Generate an SSH key (`ed25519`) for the `deploy` user and add it to GitHub.
+3. **Project Setup:** Clone the repository, run `pnpm install`, and install Playwright system dependencies.
+4. **Environment:** Create and populate the `.env` file on the server.
+
+### Acceptance Checks:
+- The codebase is cloned in `/home/deploy/real-estate-monitor`.
+- Running `node scrape.js --once` completes successfully on the server.
+- The dashboard responds locally on port 3000 on the server.
+
+---
+
+## Milestone 9: Register a Free .eus Domain
+**Objective:** Point a custom domain to the Azure VM.
+
+### Technical Requirements:
+1. Register a free `.eus` domain using the GitHub Student Developer Pack promotion.
+2. Configure DNS `A` records (root and `www`) to point to the Azure VM's public IP address.
+
+### Acceptance Checks:
+- Running `dig yourdomain.eus +short` returns the correct Azure public IP.
+
+---
+
+## Milestone 10: Deploy Services, Reverse Proxy & HTTPS
+**Objective:** Make the dashboard publicly accessible securely and run the scraper autonomously.
+
+### Technical Requirements:
+1. **Systemd Service:** Create `/etc/systemd/system/real-estate-dashboard.service` to keep the dashboard running permanently and restart on failure.
+2. **Scheduled Scraping:** Setup a crontab entry for the `deploy` user to run the scraper every 30 minutes (`*/30 * * * * cd /home/deploy/real-estate-monitor && /usr/bin/node scrape.js --once`).
+3. **Nginx Reverse Proxy:** Install Nginx and configure it to proxy traffic from port 80 to `http://127.0.0.1:3000`.
+4. **HTTPS / Certbot:** Install `certbot` and `python3-certbot-nginx` to obtain a Let's Encrypt TLS certificate and configure automatic HTTP to HTTPS redirection.
+
+### Acceptance Checks:
+- `sudo systemctl status real-estate-dashboard` shows active/running.
+- Scrapes execute automatically based on the cron schedule.
+- Visiting `http://yourdomain.eus` automatically redirects to `https://yourdomain.eus` with a valid lock icon.
+- The system survives a server reboot (`sudo reboot`).
+
+---
+
+## Milestone Final: Update README & Submit
+**Objective:** Document the project deployment and architecture.
+
+### Technical Requirements:
+1. Update `README.md` to include:
+   - A prominent link to the live dashboard.
+   - Deployment architecture description (Azure VM, Nginx, Certbot, Turso, Cron/Systemd).
+   - Any extra features implemented.
+   - Screenshots and lessons learned.
