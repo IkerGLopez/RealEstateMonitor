@@ -1,0 +1,16 @@
+[Unit]
+Description=Real Estate Monitor Dashboard
+After=network.target
+
+[Service]
+User=deploy
+WorkingDirectory=/home/deploy/real-estate-monitor
+EnvironmentFile=/home/deploy/real-estate-monitor/.env
+ExecStart=/usr/bin/node /home/deploy/real-estate-monitor/dashboard.js --port 3000
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/deploy/real-estate-monitor/dashboard.log
+StandardError=append:/home/deploy/real-estate-monitor/dashboard.log
+
+[Install]
+WantedBy=multi-user.target

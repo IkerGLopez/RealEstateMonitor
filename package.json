@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start:dashboard": "node dashboard.js --port 3000",
+    "scrape:once": "node scrape.js --once",
+    "scheduler": "node scrape.js --schedule",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

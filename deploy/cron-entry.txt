@@ -1,0 +1,3 @@
+# Add this line to the deploy user's crontab with `sudo crontab -u deploy -e`
+# It runs the scraper every 30 minutes and appends logs to scrape.log
+*/30 * * * * cd /home/deploy/real-estate-monitor && /usr/bin/node /home/deploy/real-estate-monitor/scrape.js --once >> /home/deploy/real-estate-monitor/scrape.log 2>&1
